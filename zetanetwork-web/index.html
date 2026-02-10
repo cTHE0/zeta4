@@ -20,26 +20,57 @@
 </head>
 <body>
     <h1>⚡ Zeta Network</h1>
-    <div id="s">Connexion...</div>
+    <div id="s">Connexion aux relais...</div>
     <div id="f"></div>
     <div class="r">
         <input id="m" placeholder="Message..." autofocus>
         <button onclick="send()">Envoyer</button>
     </div>
 <script>
-const s=document.getElementById('s'),f=document.getElementById('f'),m=document.getElementById('m');
-let ws;
-function connect(){
-    const proto=location.protocol==='https:'?'wss:':'ws:';
-    ws=new WebSocket(proto+'//'+location.host+'/ws');
-    ws.onopen=()=>{s.textContent='✅ Connecté';s.className='ok'};
-    ws.onmessage=e=>{const d=document.createElement('div');d.textContent=e.data;f.appendChild(d);f.scrollTop=f.scrollHeight};
-    ws.onclose=()=>{s.textContent='⏳ Reconnexion...';s.className='err';setTimeout(connect,2000)};
-    ws.onerror=()=>{s.className='err'};
+// Liste des relais VPS (ajouter les futurs VPS ici)
+const RELAYS = [
+    'wss://r1.zetanetwork.org/ws'
+];
+
+const s=document.getElementById('s'), f=document.getElementById('f'), m=document.getElementById('m');
+let sockets = [];
+
+function log(txt) {
+    const d = document.createElement('div');
+    d.textContent = txt;
+    f.appendChild(d);
+    f.scrollTop = f.scrollHeight;
 }
-function send(){const t=m.value.trim();if(t&&ws?.readyState===1){ws.send(t);m.value=''}}
-m.onkeydown=e=>{if(e.key==='Enter')send()};
-connect();
+
+function connectAll() {
+    let connected = 0;
+    RELAYS.forEach((url, i) => {
+        const ws = new WebSocket(url);
+        ws.onopen = () => { connected++; s.textContent = `✅ Connecté (${connected}/${RELAYS.length} relais)`; s.className='ok'; };
+        ws.onmessage = e => log(e.data);
+        ws.onclose = () => { connected = Math.max(0, connected-1); s.textContent = connected ? `⚡ ${connected} relais` : '⏳ Reconnexion...'; s.className = connected ? 'ok':'err'; setTimeout(() => connectRelay(i), 3000); };
+        ws.onerror = () => { s.className='err'; };
+        sockets[i] = ws;
+    });
+}
+
+function connectRelay(i) {
+    const ws = new WebSocket(RELAYS[i]);
+    ws.onopen = () => { s.textContent = '✅ Reconnecté'; s.className='ok'; };
+    ws.onmessage = e => log(e.data);
+    ws.onclose = () => setTimeout(() => connectRelay(i), 3000);
+    sockets[i] = ws;
+}
+
+function send() {
+    const t = m.value.trim();
+    if (!t) return;
+    sockets.forEach(ws => { if (ws?.readyState === 1) ws.send(t); });
+    m.value = '';
+}
+
+m.onkeydown = e => { if (e.key === 'Enter') send(); };
+connectAll();
 </script>
 </body>
 </html>
