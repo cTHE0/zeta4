@@ -1,0 +1,10 @@
+# Cargo.toml
+[package]
+name = "zetanetwork-node"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libp2p = { version = "0.53", features = ["tcp", "websocket", "mplex", "yamux", "noise", "gossipsub", "identify", "ping"] }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
