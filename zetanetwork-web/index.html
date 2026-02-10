@@ -1,76 +1,62 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Zeta Network</title>
-    <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:system-ui;max-width:700px;margin:2rem auto;padding:0 1rem;background:#0a0a0a;color:#ddd}
-        h1{color:#00d4ff;margin-bottom:.3rem}
-        #s{color:#888;font-size:.85rem;margin:.3rem 0}
-        #s.ok{color:#4caf50}#s.err{color:#f44336}
-        #f{border:1px solid #222;border-radius:8px;padding:1rem;height:60vh;overflow-y:auto;margin:1rem 0;background:#111}
-        #f div{padding:.3rem 0;border-bottom:1px solid #1a1a1a;word-wrap:break-word}
-        .r{display:flex;gap:.5rem}
-        input{flex:1;padding:.6rem;border:1px solid #333;border-radius:6px;background:#111;color:#ddd;font-size:1rem;outline:0}
-        input:focus{border-color:#00d4ff}
-        button{padding:.6rem 1.2rem;border:0;border-radius:6px;background:#00d4ff;color:#000;font-weight:700;cursor:pointer}
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zeta Network</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui;max-width:700px;margin:2rem auto;padding:0 1rem;background:#0a0a0a;color:#ddd}
+h1{color:#00d4ff}
+#s{font-size:.85rem;margin:.5rem 0;color:#888}
+#s.ok{color:#4caf50}#s.err{color:#f44336}
+#c{margin:.5rem 0}
+#c a{color:#ffb74d;text-decoration:underline;cursor:pointer}
+#c div{margin:.2rem 0;font-size:.85rem}
+#f{border:1px solid #222;border-radius:8px;padding:.8rem;height:55vh;overflow-y:auto;margin:.8rem 0;background:#111}
+#f div{padding:.25rem 0;border-bottom:1px solid #1a1a1a;word-wrap:break-word;font-size:.9rem}
+.r{display:flex;gap:.5rem}
+input{flex:1;padding:.5rem;border:1px solid #333;border-radius:6px;background:#111;color:#ddd;outline:0}
+input:focus{border-color:#00d4ff}
+button{padding:.5rem 1rem;border:0;border-radius:6px;background:#00d4ff;color:#000;font-weight:700;cursor:pointer}
+</style>
 </head>
 <body>
-    <h1>⚡ Zeta Network</h1>
-    <div id="s">Connexion aux relais...</div>
-    <div id="f"></div>
-    <div class="r">
-        <input id="m" placeholder="Message..." autofocus>
-        <button onclick="send()">Envoyer</button>
-    </div>
+<h1>⚡ Zeta Network</h1>
+<div id="s">Connexion aux relais...</div>
+<div id="c"></div>
+<div id="f"></div>
+<div class="r"><input id="m" placeholder="Message..." autofocus><button onclick="send()">Envoyer</button></div>
 <script>
-// Liste des relais VPS (ajouter les futurs VPS ici)
-const RELAYS = [
-    'wss://r1.zetanetwork.org/ws'
-];
+// ── Liste des relais (IP brutes) ──
+const RELAYS=['65.75.201.11'];
 
-const s=document.getElementById('s'), f=document.getElementById('f'), m=document.getElementById('m');
-let sockets = [];
+const s=document.getElementById('s'),c=document.getElementById('c'),f=document.getElementById('f'),m=document.getElementById('m');
+let socks=[],up=0;
 
-function log(txt) {
-    const d = document.createElement('div');
-    d.textContent = txt;
-    f.appendChild(d);
-    f.scrollTop = f.scrollHeight;
+function log(t){const d=document.createElement('div');d.textContent=t;f.appendChild(d);f.scrollTop=f.scrollHeight}
+function status(){s.textContent=up?`✅ ${up}/${RELAYS.length} relais`:'⏳ Aucun relais';s.className=up?'ok':'err'}
+
+function connectRelay(ip,i){
+    const ws=new WebSocket('wss://'+ip+'/ws');
+    let ok=false;
+    ws.onopen=()=>{ok=true;up++;status();const el=document.getElementById('c'+i);if(el)el.remove()};
+    ws.onmessage=e=>log(e.data);
+    ws.onclose=()=>{if(ok){up--;status()}setTimeout(()=>connectRelay(ip,i),3000)};
+    ws.onerror=()=>{
+        if(!document.getElementById('c'+i)){
+            const d=document.createElement('div');d.id='c'+i;
+            d.innerHTML='⚠️ Relais '+ip+' — <a href="https://'+ip+'" target="_blank">Autoriser le certificat</a> puis revenez ici';
+            c.appendChild(d);
+        }
+    };
+    socks[i]=ws;
 }
 
-function connectAll() {
-    let connected = 0;
-    RELAYS.forEach((url, i) => {
-        const ws = new WebSocket(url);
-        ws.onopen = () => { connected++; s.textContent = `✅ Connecté (${connected}/${RELAYS.length} relais)`; s.className='ok'; };
-        ws.onmessage = e => log(e.data);
-        ws.onclose = () => { connected = Math.max(0, connected-1); s.textContent = connected ? `⚡ ${connected} relais` : '⏳ Reconnexion...'; s.className = connected ? 'ok':'err'; setTimeout(() => connectRelay(i), 3000); };
-        ws.onerror = () => { s.className='err'; };
-        sockets[i] = ws;
-    });
-}
+function send(){const t=m.value.trim();if(!t)return;socks.forEach(w=>{if(w?.readyState===1)w.send(t)});m.value=''}
+m.onkeydown=e=>{if(e.key==='Enter')send()};
 
-function connectRelay(i) {
-    const ws = new WebSocket(RELAYS[i]);
-    ws.onopen = () => { s.textContent = '✅ Reconnecté'; s.className='ok'; };
-    ws.onmessage = e => log(e.data);
-    ws.onclose = () => setTimeout(() => connectRelay(i), 3000);
-    sockets[i] = ws;
-}
-
-function send() {
-    const t = m.value.trim();
-    if (!t) return;
-    sockets.forEach(ws => { if (ws?.readyState === 1) ws.send(t); });
-    m.value = '';
-}
-
-m.onkeydown = e => { if (e.key === 'Enter') send(); };
-connectAll();
+RELAYS.forEach((ip,i)=>connectRelay(ip,i));
 </script>
 </body>
 </html>
