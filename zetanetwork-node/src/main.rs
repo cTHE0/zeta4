@@ -59,8 +59,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 )),
                 ping: ping::Behaviour::new(ping::Config::new()),
             }
+        })?
+        .with_swarm_config(|cfg: libp2p::swarm::Config| {
+            cfg.with_idle_connection_timeout(Duration::from_secs(300))
         })
-        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(300)))
         .build();
 
     let peer_id = *swarm.local_peer_id();
@@ -134,8 +136,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
             Some(text) = ws_to_gossip_rx.recv() => {
                 // Publier le message du navigateur sur gossipsub
+                let data: Vec<u8> = text.into_bytes();
                 if let Err(e) = swarm.behaviour_mut().gossipsub.publish(
-                    topic.clone(), text.into_bytes()
+                    topic.clone(), data
                 ) {
                     // Normal avec 0 pair: InsufficientPeers
                     eprintln!("gossipsub publish (attendu si aucun pair): {e}");
