@@ -1,91 +1,107 @@
-<!-- index.html (servi depuis zetanetwork.org) -->
+<!-- index.html — Zeta Network Frontend -->
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <title>Zeta Network</title>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
-        #feed { border: 1px solid #ccc; padding: 1rem; height: 400px; overflow-y: auto; margin: 1rem 0; }
-        #status { color: #666; margin: 0.5rem 0; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 800px; margin: 2rem auto; padding: 0 1rem;
+            background: #0a0a0a; color: #e0e0e0;
+        }
+        h1 { color: #00d4ff; margin-bottom: 0.5rem; }
+        #status { color: #888; margin: 0.5rem 0; font-size: 0.9rem; }
+        #status.connected { color: #4caf50; }
+        #status.error { color: #f44336; }
+        #nodes { color: #888; font-size: 0.85rem; margin-bottom: 1rem; }
+        #feed {
+            border: 1px solid #333; border-radius: 8px;
+            padding: 1rem; height: 400px; overflow-y: auto;
+            margin: 1rem 0; background: #111;
+        }
+        #feed .msg {
+            padding: 0.4rem 0; border-bottom: 1px solid #1a1a1a;
+            word-wrap: break-word; font-size: 0.95rem;
+        }
+        .input-row { display: flex; gap: 0.5rem; }
+        #msg {
+            flex: 1; padding: 0.7rem; border: 1px solid #333;
+            border-radius: 6px; background: #111; color: #e0e0e0;
+            font-size: 1rem; outline: none;
+        }
+        #msg:focus { border-color: #00d4ff; }
+        button {
+            padding: 0.7rem 1.5rem; border: none; border-radius: 6px;
+            background: #00d4ff; color: #000; font-weight: bold;
+            cursor: pointer; font-size: 1rem;
+        }
+        button:hover { background: #00b8d9; }
     </style>
 </head>
 <body>
-    <h1>Zeta Network</h1>
-    <div id="status">Connexion...</div>
-    <div id="nodes">Nœuds: 0</div>
-    <input id="msg" placeholder="Message" style="width:70%">
-    <button onclick="send()">Envoyer</button>
+    <h1>⚡ Zeta Network</h1>
+    <div id="status">Connexion au réseau...</div>
+    <div id="nodes">Relais: 1</div>
     <div id="feed"></div>
+    <div class="input-row">
+        <input id="msg" placeholder="Votre message..." autofocus>
+        <button onclick="send()">Envoyer</button>
+    </div>
 
-    <script type="module">
-        // Import js-libp2p (léger, uniquement pour WebSocket)
-        import { createLibp2p } from 'https://cdn.jsdelivr.net/npm/libp2p@0.46/+esm';
-        import { gossipsub } from 'https://cdn.jsdelivr.net/npm/@libp2p/gossipsub/+esm';
-        import { webSockets } from 'https://cdn.jsdelivr.net/npm/libp2p/websockets/+esm';
-        import { mplex } from 'https://cdn.jsdelivr.net/npm/libp2p/mplex/+esm';
-        import { noise } from 'https://cdn.jsdelivr.net/npm/libp2p/noise/+esm';
+    <script>
+        const RELAY = '65.75.201.11';
+        const WS_PORT = 9091;
+        const statusEl = document.getElementById('status');
+        const feedEl = document.getElementById('feed');
+        const msgEl = document.getElementById('msg');
+        let ws;
 
-        let libp2p;
+        function connect() {
+            // ws:// si HTTP, wss:// si HTTPS (nécessite TLS proxy côté serveur)
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${proto}//${RELAY}:${WS_PORT}`);
 
-        async function init() {
-            // Se connecter via WebSocket aux VPS
-            const bootstrap = [
-                '/dns4/zetanetwork.org/tcp/9091/ws/p2p/QmVPS1',
-                '/dns4/zetanetwork.org/tcp/9091/ws/p2p/QmVPS2'
-            ];
+            ws.onopen = () => {
+                statusEl.textContent = '✅ Connecté au réseau Zeta';
+                statusEl.className = 'connected';
+            };
 
-            libp2p = await createLibp2p({
-                transports: [webSockets()],
-                streamMuxers: [mplex()],
-                connectionEncryption: [noise()],
-                pubsub: gossipsub(),
-                peerDiscovery: []
-            });
+            ws.onmessage = (evt) => {
+                const div = document.createElement('div');
+                div.className = 'msg';
+                div.textContent = evt.data;
+                feedEl.appendChild(div);
+                feedEl.scrollTop = feedEl.scrollHeight;
+            };
 
-            await libp2p.start();
+            ws.onclose = () => {
+                statusEl.textContent = '⚠️ Déconnecté — reconnexion dans 3s...';
+                statusEl.className = 'error';
+                setTimeout(connect, 3000);
+            };
 
-            // Mesurer latence et garder les 10 meilleurs
-            const nodes = await Promise.all(
-                bootstrap.map(async addr => {
-                    const start = Date.now();
-                    try {
-                        await libp2p.dial(addr);
-                        return { addr, latency: Date.now() - start };
-                    } catch {
-                        return { addr, latency: Infinity };
-                    }
-                })
-            );
-
-            const best = nodes
-                .filter(n => n.latency < 10000)
-                .sort((a, b) => a.latency - b.latency)
-                .slice(0, 10);
-
-            document.getElementById('nodes').textContent = `Nœuds: ${best.length}`;
-
-            // S'abonner au topic
-            await libp2p.pubsub.subscribe('global-feed');
-            libp2p.pubsub.addEventListener('message', (evt) => {
-                if (evt.detail.topic === 'global-feed') {
-                    const msg = new TextDecoder().decode(evt.detail.data);
-                    document.getElementById('feed').innerHTML += `<div>${msg}</div>`;
-                }
-            });
-
-            document.getElementById('status').textContent = '✅ Connecté';
+            ws.onerror = () => {
+                statusEl.textContent = '❌ Erreur de connexion';
+                statusEl.className = 'error';
+            };
         }
 
         function send() {
-            const msg = document.getElementById('msg').value;
-            if (msg && libp2p) {
-                libp2p.pubsub.publish('global-feed', new TextEncoder().encode(msg));
-                document.getElementById('msg').value = '';
+            const text = msgEl.value.trim();
+            if (text && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(text);
+                msgEl.value = '';
             }
         }
 
-        init();
+        // Envoyer avec Entrée
+        msgEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') send();
+        });
+
+        connect();
     </script>
 </body>
 </html>
