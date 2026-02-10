@@ -51,15 +51,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
             )
             .expect("behaviour gossipsub valide");
 
-            Result::<_, std::io::Error>::Ok(ZetaBehaviour {
+            ZetaBehaviour {
                 gossipsub,
                 identify: identify::Behaviour::new(identify::Config::new(
                     "/zetanetwork/1.0.0".into(),
                     key.public(),
                 )),
                 ping: ping::Behaviour::new(ping::Config::new()),
-            })
-        })?
+            }
+        })
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(300)))
         .build();
 
@@ -135,7 +135,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Some(text) = ws_to_gossip_rx.recv() => {
                 // Publier le message du navigateur sur gossipsub
                 if let Err(e) = swarm.behaviour_mut().gossipsub.publish(
-                    topic.clone(), text.as_bytes()
+                    topic.clone(), text.into_bytes()
                 ) {
                     // Normal avec 0 pair: InsufficientPeers
                     eprintln!("gossipsub publish (attendu si aucun pair): {e}");
