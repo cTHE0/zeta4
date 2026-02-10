@@ -59,9 +59,16 @@
         let ws;
 
         function connect() {
-            // ws:// si HTTP, wss:// si HTTPS (nécessite TLS proxy côté serveur)
-            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(`${proto}//${RELAY}:${WS_PORT}`);
+            // Connexion directe au WebSocket du nœud
+            // Si servi depuis le même serveur, utilise le proxy nginx /ws
+            let wsUrl;
+            if (location.hostname === RELAY || location.hostname === 'zetanetwork.org' || location.hostname === 'www.zetanetwork.org') {
+                const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+                wsUrl = `${proto}//${location.host}/ws`;
+            } else {
+                wsUrl = `ws://${RELAY}:${WS_PORT}`;
+            }
+            ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
                 statusEl.textContent = '✅ Connecté au réseau Zeta';
